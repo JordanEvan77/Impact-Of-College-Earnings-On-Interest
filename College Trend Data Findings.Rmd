@@ -1,0 +1,116 @@
+---
+title: "College Trend Data"
+author: "Jordan Gropper"
+date: '2022-07-07'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# I want to turn off the running code for this, so the libraries are just shown
+library(fixest)
+library(ggplot2)
+library(tidyverse)
+library(vtable)
+library(Ecdat)
+library(ggstance)
+library(multcomp)
+library(NHANES)
+```
+## The Question: 
+
+The data set analyzed in this in this project contains a wealth of information on a set of US colleges, and their personal statistics, such as graduation rate, earnings of graduates, acceptance rate and student composition data. The main question I am seeking to answer has to do with how the College ScoreCard (https://collegescorecard.ed.gov/) was released in September of 2015. **Among colleges that predominantly grant bachelor’s degrees, did the release of this Score Card result in more student interest in high-earnings colleges relative to low-earnings ones (as proxied by Google searches for keywords associated with those colleges)?** To answer this question, I run regression analysis, observing the causal power of a set of variables, working to properly control for back door variables. The approach is formatted in such a way that I will end up with a model that is focused on determining the proper relationship between the treatment (the College Score Card) and the Result (Interest in High and Low earning schools).
+
+
+## The Data:
+
+The data set gathered from Google Trends is initially a set of 16 different csv files. I bring them together through utilizing map_df() and list.files() to stack the data on top of each other to form a data frame. After cleaning up the date formatting, I remove all duplicate listings of the schools to simplify the analysis and further cleaning of the data. This isn't a perfect approach, and at another junction, it would be appropriate to trace duplicates within year, and work to manually distinguish them by their Operating ID. Regardless, the data set still have 72,000 observations over the 4 year time span, with roughly 18,000 schools per year that we are observing. The data cleaning continues, as I standardize the index measurement. This is the comparison system provided in the data to detect interest, but it isn't unit-comparable between schools, rather within a school. So I subtract the Mean and divide by the Standard Deviation for each observation to make it directly comparable to itself over years. 
+
+Grounding the date column by Month, there are now 12 observations for each college, in each year. I then add the extra panel information from the score card data set through an inner_join(). This becomes useful later in my analysis when looking at attributes that may impact interest in the school. Finally, I limit the schools to simply schools that have Bachelor's degrees, as their main degree type and create a dummy variable for both high and low earnings, as well as before and after the college score cards release, in September of 2015.
+
+
+## Assumptions Made:
+
+
+-There is a variable in the Scorecard with information about the median earnings of graduates ten years after graduation for each college. But how can we define “high-earning” and “low-earning” colleges? There’s not a single answer - be ready to defend your choice.
+
+-What level should the data be at? You can leave the data as is, with one row per week per keyword. Or group_by and summarize to put things to one week per college, or one month per college, or one mont per keyword, etc. etc.
+
+-How should the regression model be designed to answer the question (transformations and functional form? Standard error adjustments? etc.), and how can we interpret the results once we have them?
+
+## Read In Already Clean Data:
+```{r}
+final_df_clean <- read_csv('Lab3_Rawdata/CleanedBase.csv')
+```
+
+
+## Exploratory Data Analysis Visuals
+-Include at least one regression and one graph
+```{r}
+
+
+```
+  **Comments**
+  
+    - This visual
+
+
+
+
+
+
+## Regression Approach:
+After finding that....
+-Explain why you are performing the analysis you are performing, and the choices you made in putting it together
+
+-Explain how your analysis addresses the research question
+
+-Any additional analyses you did that led you to design your main analysis that way (i.e. “I graphed Y vs. X and it looked nonlinear so I added a polynomial term” - you could even include this additional analysis if you like)
+
+```{r}
+#Regression 1
+#your goal here is to see how the Scorecard shifted interest between high- and low-earnings colleges
+
+reg1 <- feols(index ~ score_avail, data=final_df_clean)
+
+summary(reg1)
+# seems that score avail has a pretty significant impact! Build from here!
+```
+
+```{r}
+#Regression 2
+reg2 <- feols(index~ score_avail + earnings + high_earnings, data= final_df_clean)
+summary(reg2)
+
+#Regression 3
+```
+
+## Explanation and interpretation of initial findings
+-Explain what we should conclude, in real world terms, based on your results
+
+
+
+
+## Regression Performance Comparison:
+
+
+I will want to use wald(), glht(), as well as general etable(reg1,reg2) to compare what I have
+```{r}
+
+```
+
+
+I will also want to do some utilization of residuals for a plot, and a residuals regression?
+```{r}
+
+
+```
+
+## Conclusions:
+
+
+
+## Further Research Questions:
