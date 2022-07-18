@@ -1,0 +1,247 @@
+---
+title: "DEA_Technical Appendix"
+author: "Jordan Gropper"
+date: '2022-07-11'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message = FALSE}
+library(gtrendsR)
+library(fixest)
+library(ggplot2)
+library(tidyverse)
+library(vtable)
+library(Ecdat)
+library(ggstance)
+library(multcomp)
+library(NHANES)
+library(purrr)
+library(lubridate)
+library(corrplot)
+library(inspectdf) 
+library(dplyr)
+```
+
+```{r}
+final_df_clean <- read_csv('Lab3_Rawdata/CleanedBase.csv')
+
+```
+
+
+
+```{r, eval=FALSE}
+#CORRELATION PLOT: 
+cor_school <- final_df_clean %>% 
+  dplyr::select(CITY, STABBR, HCM2, CONTROL, PBI, ANNHI, TRIBAL, AANAPII, HSI, NANTI, MENONLY, RELAFFIL, SAT_AVG, PCTPELL,
+                RET_FT4, PCTFLOAN, month) %>% 
+  dplyr::select(where(is.numeric))
+
+#filter relevant items
+
+
+corrplot(cor(cor_school),
+         order = "original",
+         diag = FALSE,
+         method = "number",
+         addCoef.col = 'black',
+         type = "upper",
+         tl.srt = 45,
+         tl.col = "black")
+
+```
+
+```{r}
+#TYPE DIAL, Not very useful
+final_df_clean %>% 
+  inspect_types() %>% 
+  show_plot()
+
+#runs
+```
+
+
+```{r}
+#HISTOGRAMS:
+#index distribution
+final_df_clean %>% ggplot(mapping = aes(index)) + 
+  geom_histogram(bins = 100, fill="blue")
+#average is close to 0
+```
+
+```{r}
+#SAT Distribution in Bachelors colleges:
+final_df_clean %>% ggplot(mapping = aes(SAT_AVG)) + 
+  geom_histogram(bins = 10, binwidth = 1000, stat="count", fill ='blue')
+
+#earnings Distributions:
+final_df_clean %>% ggplot(mapping = aes(earnings)) + 
+  geom_histogram(bins = 100, stat="count", fill ='blue')
+# we have a few serious outliers, with the majority of earnings being reported around the $40k 
+#range
+
+```
+
+```{r}
+final_df_clean %>% ggplot(mapping = aes(factor(year))) + 
+  geom_histogram(bins = 100, stat="count", fill ='blue')
+#Interesting to see that there aren't as many schools observed in 2016
+
+final_df_clean %>% group_by(year,month) %>% ggplot(mapping = aes(factor(month))) + 
+  geom_histogram(bins = 100, stat="count", fill ='blue')
+#It seems that the first and last observed months have the only difference in count of observations
+
+```
+
+```{r}
+final_df_clean %>% drop_na() %>%  ggplot(mapping = aes(high_earnings)) + 
+  geom_histogram(bins = 10, binwidth = 1000, stat="count", fill ='blue')
+#the majority of schools in each year aren't high earning
+
+```
+
+
+```{r}
+grouped_control <- final_df_clean %>% group_by(CONTROL) %>% summarize(earnings=mean(earnings, na.rm=TRUE))
+
+grouped_control %>% 
+  ggplot(mapping = aes(x=CONTROL, y = earnings)) + 
+  geom_col(fill= 'blue') 
+
+```
+
+```{r}
+#paterns over months
+grouped_month <-  final_df_clean %>% group_by(month) %>% summarize(index = sum(index, na.rm=TRUE))
+
+grouped_month %>% 
+ggplot(mapping = aes(x=month, y =index)) + 
+  geom_col()
+
+#Grouped by Year:
+
+grouped_year <-  final_df_clean %>% group_by(year) %>% summarize(index = sum(index, na.rm=TRUE))
+
+grouped_year %>% 
+  ggplot(mapping = aes(x=year, y =index)) + 
+  geom_col()
+#it appears that the mean of the indexes of interest were averaging lower in 2016.
+
+
+```
+
+```{r}
+
+
+#type of urbanization of the school
+final_df_clean %>% group_by(LOCALE) %>%  summarize(m_earnings = mean(earnings, na.rm=TRUE)) %>% 
+ggplot(mapping = aes(x=as.factor(LOCALE), y= m_earnings)) + 
+  geom_col() 
+
+
+final_df_clean %>% ggplot(mapping = aes(x=year, y= earnings, fill=as.factor(high_earnings))) + 
+  geom_col(position='dodge')
+
+```
+
+## Scatter Plots and Line Graphs:
+## Top Schools
+I need help with these, and I want to add on a lot more:
+```{r}
+#trying to do just the top 8 earning school
+top_school <- final_df_clean %>% 
+  group_by(schname) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  arrange(-earnings) %>% 
+  head(8)
+
+
+top_school_data <- final_df_clean %>% filter(unitid %in% top_school$unitid)
+
+
+top_school_data %>% 
+  ggplot(mapping = aes(x = monthorweek, y = index, color = as.factor(schname))) + 
+  geom_line()
+```
+
+
+## Bottom Earning Schools:
+```{r}
+#now do bottom earning schools:
+bot_school <- final_df_clean %>% 
+  group_by(schname) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  arrange(earnings) %>% 
+  head(8)
+
+
+bot_school_data <- final_df_clean %>% filter(unitid %in% bot_school$unitid)
+
+bot_school_data %>% 
+  ggplot(mapping = aes(x = monthorweek, y = index, color = as.factor(schname))) + 
+  geom_line()
+```
+
+## Great Box Plots:
+These work great!
+```{r}
+
+final_df_clean %>% 
+  ggplot(aes(x = factor(month), y = index)) +
+  geom_boxplot() +
+  theme_bw() # GREAT NEW BOXPLOT!
+
+
+final_df_clean %>% 
+  ggplot(aes(x = factor(year), y = index)) +
+  geom_boxplot() +
+  theme_bw() # GREAT NEW BOXPLOT!
+
+
+
+```
+
+
+```{r}
+final_df_clean %>% 
+  ggplot(aes(x = factor(high_earnings), y = index)) +
+  geom_boxplot() +
+  theme_bw()
+
+final_df_clean %>% 
+  ggplot(aes(x = factor(score_avail), y = earnings)) +
+  geom_boxplot() +
+  theme_bw()
+```
+
+
+
+
+Would like some visuals that look at the "flag" variables, and if any of those are high earnings as a group, or high interest as a group.
+```{r}
+#close but not working quite yet!
+flag_table <- final_df_clean %>% 
+  dplyr::select(PBI, ANNHI, TRIBAL, AANAPII, HSI, NANTI, MENONLY) %>% 
+  summarize(across(.fns = sum))
+
+
+flag_table %>% pivot_longer(cols=everything()) %>%  
+ggplot(mapping = aes(x=name, y=value)) + 
+  geom_col()
+```
+
+
+
+
+
+
+
+
+
+
