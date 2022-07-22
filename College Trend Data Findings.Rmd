@@ -1,5 +1,5 @@
 ---
-title: "College Trend Data"
+title: "College Interest Trends Regression Findings"
 author: "Jordan Gropper"
 date: '2022-07-07'
 output: html_document
@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, include=FALSE}
 # I want to turn off the running code for this, so the libraries are just shown
 library(fixest)
 library(ggplot2)
@@ -27,90 +27,164 @@ The data set analyzed in this in this project contains a wealth of information o
 
 ## The Data:
 
-The data set gathered from Google Trends is initially a set of 16 different csv files. I bring them together through utilizing map_df() and list.files() to stack the data on top of each other to form a data frame. After cleaning up the date formatting, I remove all duplicate listings of the schools to simplify the analysis and further cleaning of the data. This isn't a perfect approach, and at another junction, it would be appropriate to trace duplicates within year, and work to manually distinguish them by their Operating ID. Regardless, the data set still have 72,000 observations over the 4 year time span, with roughly 18,000 schools per year that we are observing. The data cleaning continues, as I standardize the index measurement. This is the comparison system provided in the data to detect interest, but it isn't unit-comparable between schools, rather within a school. So I subtract the Mean and divide by the Standard Deviation for each observation to make it directly comparable to itself over years. 
+The data set gathered from Google Trends is initially a set of 16 different csv files. I bring them together utilizing map_df() and list.files() to stack the data on top of each other to form a data frame. After cleaning up the date formatting, I remove all duplicate listings of the schools to simplify the analysis and further cleaning of the data. This isn't a perfect approach, and at another junction, it would be appropriate to trace duplicates within year, and work to manually distinguish them by their Operating ID. Regardless, the data set still have 72,000 observations over the 4 year time span, with over 1,900 schools. The data cleaning continues, as I standardize the index measurement. This is the comparison system provided in the data to detect interest, but it isn't unit-comparable between schools, rather within a school. So I subtract the Mean and divide by the Standard Deviation for each observation to make it directly comparable to other schools over time. 
 
 Grounding the date column by Month, there are now 12 observations for each college, in each year. I then add the extra panel information from the score card data set through an inner_join(). This becomes useful later in my analysis when looking at attributes that may impact interest in the school. Finally, I limit the schools to simply schools that have Bachelor's degrees, as their main degree type and create a dummy variable for both high and low earnings, as well as before and after the college score cards release, in September of 2015.
 
-
-## Assumptions Made:
-
-
--There is a variable in the Scorecard with information about the median earnings of graduates ten years after graduation for each college. But how can we define “high-earning” and “low-earning” colleges? There’s not a single answer - be ready to defend your choice.
-
--What level should the data be at? You can leave the data as is, with one row per week per keyword. Or group_by and summarize to put things to one week per college, or one month per college, or one mont per keyword, etc. etc.
-
--How should the regression model be designed to answer the question (transformations and functional form? Standard error adjustments? etc.), and how can we interpret the results once we have them?
 
 ## Read In Already Clean Data:
 ```{r}
 final_df_clean <- read_csv('Lab3_Rawdata/CleanedBase.csv')
 ```
+## Assumptions Made:
+
+When cleaning the data set, I made a set of dummy variables based on the assumption of earnings distribution. The earnings mean was $42,485.12, with the Median being lower at $40,900. This meant that the data was skewed to the left, however in order to keep high-earning as an elevated group I decided it had to be at least above the mean. That is why the variable high_earnings is dictated by schools that have median earning students making at least $42,485.12. An additional transform I did was to keep the data schemed at the level of month. I took the incremented variable "monthorweek" and floored it to the first of the month, to help organize the data, and make it uniform as Time Series data. From here I gathered the Month and Year into their own variables as well, which I used to spot trends over the year and create controls for my regressions, as is seen below.
 
 
 ## Exploratory Data Analysis Visuals
--Include at least one regression and one graph
+-There were several interesting things that I found in my EDA process. The first of which shows that even after standardization the index of interest is normally distributed, around 0. This makes sense, as we have removed the mean from each observation, to make it comparible to other schools:
 ```{r}
+final_df_clean %>% ggplot(mapping = aes(index)) + 
+  geom_histogram(bins = 100, fill="blue")
+```
 
+-The second important finding was that there is indeed a patern over the timing within each year, that directly impacts interest
+```{r}
+#paterns over months
+grouped_month <-  final_df_clean %>% group_by(month) %>% summarize(index = sum(index, na.rm=TRUE))
+
+grouped_month %>% 
+ggplot(mapping = aes(x=month, y =index)) + 
+  geom_col()
 
 ```
+
   **Comments**
   
-    - This visual
+    - This visual portrays that the highest time for searching for colleges (max interest) is in September and the lowest time of interest is in December.
+    -This makes sense as September is when School starts for most folks, and is also a common time for students looking to get into college next year to be begin search. December is winter break, and very few individual's would be looking at potential schools during that time.
+    - This visual indicates that we should have a time control in our model, which we will build below.
 
+The last visual of interest is comparing the interest in high and low earning colleges over time:
+```{r}
+final_df_clean %>% group_by(high_earnings, monthorweek) %>%  filter(high_earnings != 'NA') %>% 
+  summarise(index = mean(index)) %>% 
+  ggplot(mapping = aes(x = monthorweek, y = index, color = as.factor(high_earnings))) + 
+  geom_line()
 
+```
 
+  **Comments**
+  
+    - The trend over time is surprisingly decreasing. This may indicate that the interest over time is negative, perhaps due to the impact of the college score card.
+    -Thus it is interesting to find that our high and low earning schools (categorized via median student earning, shown below) seem to switch positions every few years, and that after the time of our score card (september 2015), schools with lower earning students (0 line) seem to have the most interest compared to high earning students (1).
+    - This doesn't directly answer our question, which is if the college score card impacted 4 year schools that have high or low earning students differently.Thus it is necessary for us to run a regression to verify what we see on the surface.
+    - The portrayal of other key characteristics in my EDA (such as stuent race, degree field, and college control type) all seem to impact interest in different ways, which we will need to control for per school.
+    -Another really interesting angle would have been to see if there were any schools not in the college score card population that we could get data for, or find some other "untreated group" to do difference in difference in, so that we could approach a different question of; How much of an impact on interest did the College Score Card have on all Bachelor Degree schools in general?
 
+## Model Building
+The regressions I went about constructing needed to have the interest index as the dependent variable, and then view both the high/low earning behavior as well as the gap between the time before the score card and after the score card. With this in mind, the first regression controls for time, earnings and score availability, as is seen below. I utilized the feols() regression library instead of the lm() library, as it allows for fixed effect controls and some other useful features, which I will utilize in my final model.
 
-
-## Regression Approach:
-After finding that....
--Explain why you are performing the analysis you are performing, and the choices you made in putting it together
-
--Explain how your analysis addresses the research question
-
--Any additional analyses you did that led you to design your main analysis that way (i.e. “I graphed Y vs. X and it looked nonlinear so I added a polynomial term” - you could even include this additional analysis if you like)
-
+## Regression Model 1
 ```{r}
 #Regression 1
 #your goal here is to see how the Scorecard shifted interest between high- and low-earnings colleges
 
-reg1 <- feols(index ~ score_avail, data=final_df_clean)
+reg1 <- feols(index ~ monthorweek + earnings + score_avail, data=final_df_clean)
 
 summary(reg1)
+
+wald(reg1, 'year', 'earnings') # we can confidently say that these two do have an impact
 # seems that score avail has a pretty significant impact! Build from here!
+resid_1 <- resid(reg1)
+plot(fitted(reg1), resid_1) # clumped pretty badly]
+etable(reg1)
 ```
 
+  **Comments**
+
+    -After reviewing the plot of residuals, it is very aparent that this first model has heterosckedasticity, which I will attempt to correct in my next model.
+    -Additionally, the initial impact of the scored card, seen in the variable score_avail seems to be quite high, with a coefficient of 3, meaning that there is a 3 standard deviation difference in interest index for all schools beteween when the score is and isn't avaialable, when including the earnings in our model.
+    -This doesn't directly answer our question, which focuses on high and low earning schools (viewed through the median student earnings), and our model has too few controls.
+    
+
+## Further Regression Approach:
+After finding that there appeared to be a pattern (heteroskedasticity) in the residuals of the first regression, I concluded that controls would need to be utilized, presumably for month of the year. It was discerned in my EDA that Interest for colleges in general fluctuated during the seasons of the year, so controlling for month was the next logical step. Additionally, after that change, which should help with the heteroskedasticity, an adaption of 'vcov = 'hetero'' in my model could be useful as well. 
+
+## Regression Model 2
 ```{r}
 #Regression 2
-reg2 <- feols(index~ score_avail + earnings + high_earnings, data= final_df_clean)
-summary(reg2)
+final_df_clean <- final_df_clean %>% mutate(f_month = factor(month))
+reg2 <- feols(index~ monthorweek + earnings + high_earnings + f_month + score_avail, vcov = 'hetero', data= final_df_clean)
 
-#Regression 3
+#set of categorical controls for month. this means that some months individuals are searching for colleges, others they aren't!
+# include vcov = hetero just as an extra percausion as well
+
+resid_2 <- resid(reg2)
+plot(fitted(reg2), resid_2)
+#Looks like there is still a wave pattern, hetero!
+
+```
+Implementing this control of month was easy, creating factor levels and simply including that within the model. This second regression had the added dummy of high_earnings as well as the dummy for score_avail to help test what the regression would find as far as significance and impact.
+
+```{r}
+wald(reg2, c('earnings')) # all variables seem relevant
+glht(reg2, linfct = c('high_earnings = 0')) #
 ```
 
-## Explanation and interpretation of initial findings
--Explain what we should conclude, in real world terms, based on your results
+  **Comments**
+
+    - Through a Wald test I found that earnings appeared to be irrelivant, with a p-Value so high that we can't reject the null hypothesis of this variable having 0 impact on our model. With this in mind, I feel justified in removing it as a needless control
+    -When viewing the residuals of the model the patern appears to be gone, with more reasonable clumping around the center.
+    -Our coefficients now also give us good interpretations for each month's comparable interest which is useful, and we now have a more reasonable coefficient that is taking into consideration high_earnings schools, however it doesn't give us the direct interpretation that we want, which we will improve on below.
+```{r}
+etable(reg1, reg2)
+```
+Having the score available does appear to be associated with a .761 Standard Deviation increase in the Interest Index (which has been standardized at this point). This along with the impact of the factored months of the year is extremely illuminating. January was left out so that the other months could be interpreted in relation, showing that September has the most interest with a 4 Standard Deviation increase compared with January, (which makes sense with the fall school year), and June appears to have the least interest with a 10 standard deviation decrease in interest compared with January. 
+
+
+Next in my analysis I wanted to create a regression that factored out all the college wide variation. This is an approach that would prevent me from having to control for all the other variables such as student population dynamics, administration style, degree subject diversity, etc. 
+
+## Regression Model 3
+```{r}
+reg3  <- feols(index ~ monthorweek + earnings + high_earnings + f_month + score_avail | schname, data = final_df_clean, vcov='hetero')
+resid_3 <- resid(reg3)
+plot(fitted(reg3), resid_3)
+
+
+wald(reg3, c('high_earnings', 'score_avail')) # our two key variables are still relevant in power
+etable(reg2, reg3)
+```
+In result we see a model that has washed out the variation in schools to identify that the power of the months and the score_availability is still has impact, and has varying impact on high and low earning schools, which we will properly define in our last model, using an interaction term! 
 
 
 
+## Regression Model 4: Final
+```{r}
+#Regression 4
+reg4  <- feols(index ~ monthorweek + earnings + high_earnings + score_avail*high_earnings + f_month | schname, data = final_df_clean, vcov = 'hetero')
+resid_4 <- resid(reg4)
+plot(fitted(reg4), resid_4)
+
+
+summary(reg4) 
+
+```
+  **Comments**
+
+    -In this case High_earnings and Score availability: there is a -1.36 standard deviation difference on the effect of score availability on High and Low Earning schools. 
+    -This finally answers our direct question! We aren't necessarily gauging the magnitude of the interest for each school, but rather concluding that there is a significant and definable change in interest in high and low earning schools, associated with the release of the college score card.
+    -Our residuals and other signifigances also look good.
+    
 
 ## Regression Performance Comparison:
+After the construction and review of our models, it makes the most sense to go with regression our final regression model. The reg4 model controls for the variation within schools, helping to "close back doors" on other causes that may impact interest, as well as the time of year, which we know has a firm impact on interest. The models without proper control have endogeneity issues, with omitted variable bias swaying the power of the coefficient. Additionally, without the interaction term, it is difficult to identify the close association between the treatment(score card) and our segmented groups (high and low earnings).
 
-
-I will want to use wald(), glht(), as well as general etable(reg1,reg2) to compare what I have
-```{r}
-
-```
-
-
-I will also want to do some utilization of residuals for a plot, and a residuals regression?
-```{r}
-
-
-```
-
-## Conclusions:
-
+# Interpretation and Conclusion
+The final reg4 model has a very convenient interaction term that helps us to understand there is a definable difference in interest between high and low earning schools when the score card is available. Based on our definition of high and low earning schools (grouped by median student earnings above), we see that there is a statistically significant finding of **when the score card is available there is a 1.36 standard deviation decrease in indexed interest from low earning schools to high earning schools **. This is unexpected for me, as I would have though that the score card would have increased interest in schools that have high earning students. However, it is interesting to see that there is an impact to how the public utilizes information to the determine what interests them. Perhaps this indicates that there are more important stats on the score_card that impact interest in this direction, beyond just the earnings of the schools. It could be that low earning schools tend to have other characteristics that are more appealing to potential students. Regardless, we have answered our question we set out to research, and have a significant and definable variation in interest between high and low earning schools.
 
 
 ## Further Research Questions:
+  A further way of observing this would to be of course to capture more years of data, which would help increase our understanding of the long term impact of the treatment. It is entirely possible that after only a few years of it being public, would individuals begin to fully utilize the score card. Additionally, with more data and samples of schools, we could segment the schools further. It would be fascinating to divide the set into 3 groups, low earning, average earning and high earning schools. It is possible that since the cut off is around the median, that there is too smooth of a transition for us to completely separate out the characteristics.
+
+  This project was incredibly interesting to do, and the analysis results are useful for understanding the impact of earning transparency on College Interest. Colleges could use these findings and conclusions to help drive further marketing and outreach campaigns to utilize their best windows of opportunity in attracting students. Looking further, it would be really engaging to find some data on students (perhaps in the form of a survey) that would delve into how students ended up selecting the schools they went to. Did they go to the school because of the earning potential, majors offered, or scholarships offered? This data would be useful in helping colleges gather further information on how they can attract students. 
