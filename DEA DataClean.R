@@ -101,11 +101,8 @@ class(final_df_clean$earnings)
 
 mean(final_df_clean$earnings, na.rm=TRUE) # our mean earnings is $42,485.12
 median(final_df_clean$earnings, na.rm=TRUE) # our median is $40,900, left skewed but close
-
-
 #anything above the mean is high earnings, anything below is low earnings
 final_df_clean$high_earnings <- ifelse(final_df_clean$earnings >= 42485, 1, 0) # this creates TRUE and FALSE, does that work?
-  #or is this better??
   #ifelse(earnings >= 42485, 1, 0)
 
 #create dummy variable for if it was before or after the score card:

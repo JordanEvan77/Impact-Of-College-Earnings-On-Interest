@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r message = FALSE}
+```{r, include = FALSE}
 library(gtrendsR)
 library(fixest)
 library(ggplot2)
@@ -188,6 +188,16 @@ bot_school_data %>%
   geom_line()
 ```
 
+```{r}
+final_df_clean %>% group_by(high_earnings, monthorweek) %>%  filter(high_earnings != 'NA') %>% 
+  summarise(index = mean(index)) %>% 
+  ggplot(mapping = aes(x = monthorweek, y = index, color = as.factor(high_earnings))) + 
+  geom_line()
+
+
+```
+
+
 ## Great Box Plots:
 These work great!
 ```{r}
@@ -235,7 +245,7 @@ flag_table %>% pivot_longer(cols=everything()) %>%
 ggplot(mapping = aes(x=name, y=value)) + 
   geom_col()
 ```
-
+HSI Stands for Hispanic Students Flag, meaning that the school is prominetly hispanic. This visual portrays that the highest sum of interest tends to be in Hispanic schools. 
 
 
 
